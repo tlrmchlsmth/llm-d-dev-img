@@ -21,8 +21,7 @@ RUN git fetch --all
 ARG VLLM_CHECKOUT_COMMIT
 RUN --mount=type=cache,target=/root/.cache/uv \
   source /opt/vllm/bin/activate && \
-  git checkout -q ${VLLM_CHECKOUT_COMMIT} && \
-  VLLM_USE_PRECOMPILED=1 uv pip install -e .
+  git checkout -q ${VLLM_CHECKOUT_COMMIT}
 
 USER 2000
 
