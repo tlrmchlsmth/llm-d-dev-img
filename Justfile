@@ -14,6 +14,7 @@ nightly:
   docker build -f llm-d/docker/Dockerfile.cuda \
     --build-arg USE_SCCACHE=false \
     --build-arg VLLM_COMMIT_SHA="$LATEST_COMMIT" \
+    --build-arg VLLM_USE_PRECOMPILED=1 \
     --label quay.expires-after=14d \
     -t llm-d-dev:nightly \
     -t "llm-d-dev:nightly-$LATEST_COMMIT" \
@@ -41,12 +42,12 @@ build HASH:
   echo "Checking out commit: {{HASH}}"
   docker build -f Dockerfile \
     --build-arg VLLM_CHECKOUT_COMMIT={{HASH}} \
-    --label quay.expires-after=14d \
+    --label quay.expires-after=3d \
     -t llm-d-dev:{{HASH}} \
-    -t quay.io/tms/llm-d-dev:0.3.0-{{HASH}} \
+    -t quay.io/tms/llm-d-dev:commit-{{HASH}} \
     .
   echo "Pushing to registry..."
-  docker push quay.io/tms/llm-d-dev:0.3.0-{{HASH}}
+  docker push quay.io/tms/llm-d-dev:commit-{{HASH}}
   echo "Build complete!"
   echo "Local tag: llm-d-dev:{{HASH}}"
-  echo "Pushed to: quay.io/tms/llm-d-dev:0.3.0-{{HASH}}"
+  echo "Pushed to: quay.io/tms/llm-d-dev:commit-{{HASH}}"
