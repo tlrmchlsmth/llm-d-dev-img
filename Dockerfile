@@ -1,24 +1,19 @@
 FROM llm-d-dev:nightly
 
-USER root
-
-RUN mkdir -p /home/code && \
-    git clone https://github.com/vllm-project/vllm.git /home/code/vllm
-
-WORKDIR /home/code/vllm
+WORKDIR /opt/vllm-source
 
 # Add all remotes upfront
-ARG VLLM_CHECKOUT_COMMIT
 RUN git remote add vllm https://github.com/vllm-project/vllm && \
   git remote add njhill https://github.com/njhill/vllm && \
   git remote add tms https://github.com/tlrmchlsmth/vllm && \
   git remote add nm https://github.com/neuralmagic/vllm
 
 # Fetch all branches
+ARG VLLM_CHECKOUT_COMMIT
 RUN git fetch --all
 
-# Checkout specific commit for testing (small layer, changes frequently)
-# Uses VLLM_USE_PRECOMPILED=1 to reuse binaries from base image
+# Check out a specific commit for testing
+# This relies on the fact that the llm-d Dockerfile installs vLLM editably!
 RUN --mount=type=cache,target=/root/.cache/uv \
   source /opt/vllm/bin/activate && \
   git checkout -q ${VLLM_CHECKOUT_COMMIT}

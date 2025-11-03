@@ -29,25 +29,40 @@ nightly:
   echo "Pushed to: quay.io/tms/llm-d-dev:nightly and quay.io/tms/llm-d-dev:nightly-$LATEST_COMMIT"
   echo "vLLM base commit updated in base_commit.txt: $LATEST_COMMIT"
 
+set shell := ["bash", "-cu"]
+
 # Build and push image with custom checkout commit (uses cached base nightly image)
-build HASH:
+build HASH='':
   #!/usr/bin/env bash
-  set -e
+  set -euo pipefail
+  # Determine the hash (default to vLLM HEAD if none passed)
+  if [ -z "{{HASH}}" ]; then
+    HASH="$(git -C /home/tms/vllm rev-parse HEAD)"
+    if [ -z "$HASH" ]; then
+      echo "Error: vLLM hash could not be determined."
+      exit 1
+    fi
+  else
+    HASH="{{HASH}}"
+  fi
+
+
   if [ ! -f base_commit.txt ]; then
     echo "Error: base_commit.txt not found. Run 'just nightly' first to create the base layer."
     exit 1
   fi
+
   BASE_COMMIT=$(cat base_commit.txt)
   echo "Building with base from nightly (base commit: $BASE_COMMIT)"
-  echo "Checking out commit: {{HASH}}"
+  echo "Checking out commit: $HASH"
   docker build -f Dockerfile \
-    --build-arg VLLM_CHECKOUT_COMMIT={{HASH}} \
+    --build-arg VLLM_CHECKOUT_COMMIT=$HASH \
     --label quay.expires-after=3d \
-    -t llm-d-dev:{{HASH}} \
-    -t quay.io/tms/llm-d-dev:commit-{{HASH}} \
+    -t llm-d-dev:${HASH} \
+    -t quay.io/tms/llm-d-dev:commit-${HASH} \
     .
   echo "Pushing to registry..."
-  docker push quay.io/tms/llm-d-dev:commit-{{HASH}}
+  docker push quay.io/tms/llm-d-dev:commit-${HASH}
   echo "Build complete!"
-  echo "Local tag: llm-d-dev:{{HASH}}"
-  echo "Pushed to: quay.io/tms/llm-d-dev:commit-{{HASH}}"
+  echo "Local tag: llm-d-dev:${HASH}"
+  echo "Pushed to: quay.io/tms/llm-d-dev:commit-${HASH}"
