@@ -13,18 +13,25 @@ The build system uses a two-layer approach to minimize rebuild times:
 1. **Base Layer** (large, rebuilt nightly):
    - Built from `llm-d/docker/Dockerfile.cuda` (llm-d submodule)
    - Full compilation of vLLM with all dependencies
+   - vLLM installed in editable mode at `/opt/vllm-source`
    - Tagged as `llm-d-dev:nightly`
    - Updated nightly to track latest vLLM main
 
 2. **Checkout Layer** (small, <100MB, rebuilt per session):
-   - Built from `./Dockerfile` which extends `llm-d-dev:nightly`
-   - Clones vLLM repo and checks out `VLLM_CHECKOUT_COMMIT`
-   - Uses `VLLM_USE_PRECOMPILED=1` to reuse compiled binaries from base layer
+   - **GitHub builds** (`./Dockerfile`): Clones vLLM from GitHub and checks out `VLLM_CHECKOUT_COMMIT`
+   - **Local builds** (`./Dockerfile.local`): Mounts local `.git` directory and checks out from local repo
+   - Only updates source files (doesn't touch compiled `.so` files from base layer)
+   - Works because base layer uses editable install - source changes are reflected immediately
    - Only works for changes that don't require recompiling vLLM binaries (e.g., Python-only changes)
 
 ### Build Arguments
 
-- `VLLM_CHECKOUT_COMMIT`: The specific vLLM commit to checkout for testing (used in quick builds)
+**Dockerfile** (GitHub builds):
+- `VLLM_CHECKOUT_COMMIT`: The specific vLLM commit to checkout from GitHub
+
+**Dockerfile.local** (Local builds):
+- `VLLM_LOCAL_GIT_DIR`: Path to local vLLM `.git` directory (default: `/home/tms/vllm/.git`)
+- `VLLM_LOCAL_REF`: Git ref to checkout - branch, commit, or tag (default: `HEAD`)
 
 ### Git Remotes
 
@@ -56,35 +63,64 @@ Manually trigger a nightly build (rebuilds the large base layer):
 just nightly
 ```
 
-### Building Custom Commits
+### Building Custom Commits from GitHub
 
-Build and push an image for a specific vLLM commit (fast, uses cached base layer):
+Build and push an image for a specific vLLM commit from GitHub (fast, uses cached base layer):
 ```bash
 just build <commit-hash>
 ```
 
 This:
 - Uses `llm-d-dev:nightly` as the base image
-- Clones vLLM and checks out `<commit-hash>`
-- Installs with `VLLM_USE_PRECOMPILED=1` to reuse binaries from base
+- Clones vLLM and checks out `<commit-hash>` from GitHub
 - Tags locally as `llm-d-dev:<commit-hash>`
-- Pushes as `quay.io/tms/llm-d-dev:0.3.0-<commit-hash>`
+- Pushes as `quay.io/tms/llm-d-dev:commit-<commit-hash>`
 
 **Note**: This only works for commits that don't require recompiling vLLM binaries (e.g., Python-only changes).
+
+### Building from Local vLLM Directory
+
+Build and push an image from your local vLLM development directory (fastest, minimal layer size):
+```bash
+just dev                                    # Uses $HOME/vllm and HEAD
+just dev /path/to/vllm                      # Custom path
+just dev /path/to/vllm my-branch            # Custom branch/commit
+```
+
+This:
+- Uses `llm-d-dev:nightly` as the base image
+- Mounts your local `.git` directory (doesn't copy it - zero layer overhead!)
+- Checks out the specified ref (branch/commit/tag) from your local repo
+- Only updates tracked source files (compiled `.so` files are NOT touched)
+- Tags locally as `llm-d-dev:local-<commit-hash>`
+- Pushes as `quay.io/tms/llm-d-dev:local-<commit-hash>`
+
+**Advantages**:
+- Extremely fast (no network fetch)
+- Works with local branches and uncommitted work
+- Minimal layer size (only changed source files)
+- Perfect for iterative development
+
+**Note**: Like `just build`, this only works for Python-only changes since the base layer's compiled binaries are reused.
 
 ## Development Workflow
 
 ### Initial Setup
 1. Run `./setup-cron.sh` once to enable nightly builds
 
-### Per-Session Workflow
+### Local Development (Recommended)
 1. Wait for nightly build or run `just nightly` to update base layer
-2. Run `just build <hash>` to build and push a custom commit image (couple minutes, <100MB layer)
+2. Make changes to your local vLLM checkout (e.g., `$HOME/vllm`)
+3. Run `just dev` to build and push an image with your local changes (fastest, ~1-2 minutes)
+
+### Testing GitHub Commits
+1. Wait for nightly build or run `just nightly` to update base layer
+2. Run `just build <hash>` to build and push a custom commit image from GitHub
 
 ### When Base Layer Needs Updating
 The base layer is automatically updated nightly. To manually update:
 1. Run `just nightly` to rebuild the base layer from latest vLLM main
-2. Continue with normal `just build <hash>` workflow
+2. Continue with normal `just dev` or `just build <hash>` workflow
 
 ## Important Notes
 

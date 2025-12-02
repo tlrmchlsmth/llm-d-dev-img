@@ -46,7 +46,6 @@ build HASH='':
     HASH="{{HASH}}"
   fi
 
-
   if [ ! -f base_commit.txt ]; then
     echo "Error: base_commit.txt not found. Run 'just nightly' first to create the base layer."
     exit 1
@@ -66,3 +65,49 @@ build HASH='':
   echo "Build complete!"
   echo "Local tag: llm-d-dev:${HASH}"
   echo "Pushed to: quay.io/tms/llm-d-dev:commit-${HASH}"
+
+# Build and push image from local vLLM directory (uses bind mount, keeps layers light)
+dev VLLM_DIR='$HOME/vllm' REF='HEAD':
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  # Expand the path
+  VLLM_PATH="{{VLLM_DIR}}"
+  VLLM_PATH="${VLLM_PATH/#\~/$HOME}"
+  VLLM_PATH="${VLLM_PATH/#\$HOME/$HOME}"
+
+  if [ ! -d "$VLLM_PATH/.git" ]; then
+    echo "Error: $VLLM_PATH/.git not found. Please provide a valid vLLM git repository."
+    exit 1
+  fi
+
+  # Get the commit hash for tagging
+  HASH="$(git -C "$VLLM_PATH" rev-parse {{REF}})"
+  if [ -z "$HASH" ]; then
+    echo "Error: Could not resolve ref '{{REF}}' in $VLLM_PATH"
+    exit 1
+  fi
+
+  if [ ! -f base_commit.txt ]; then
+    echo "Error: base_commit.txt not found. Run 'just nightly' first to create the base layer."
+    exit 1
+  fi
+
+  BASE_COMMIT=$(cat base_commit.txt)
+  echo "Building with base from nightly (base commit: $BASE_COMMIT)"
+  echo "Using local vLLM from: $VLLM_PATH"
+  echo "Checking out ref: {{REF}} (commit: $HASH)"
+
+  docker build -f Dockerfile.local \
+    --build-arg VLLM_LOCAL_GIT_DIR="$VLLM_PATH/.git" \
+    --build-arg VLLM_LOCAL_REF={{REF}} \
+    --label quay.expires-after=3d \
+    -t llm-d-dev:local-${HASH} \
+    -t quay.io/tms/llm-d-dev:local-${HASH} \
+    .
+
+  echo "Pushing to registry..."
+  docker push quay.io/tms/llm-d-dev:local-${HASH}
+  echo "Build complete!"
+  echo "Local tag: llm-d-dev:local-${HASH}"
+  echo "Pushed to: quay.io/tms/llm-d-dev:local-${HASH}"

@@ -1,0 +1,18 @@
+FROM llm-d-dev:nightly
+
+ARG VLLM_LOCAL_GIT_DIR=/home/tms/vllm/.git
+ARG VLLM_LOCAL_REF=HEAD
+
+WORKDIR /opt/vllm-source
+
+# Fetch from local git repo and checkout the specified ref
+# The bind mount doesn't add to layer size - only changed source files do
+RUN --mount=type=bind,source=${VLLM_LOCAL_GIT_DIR},target=/tmp/vllm-git \
+    git remote add local file:///tmp/vllm-git && \
+    git fetch local && \
+    git checkout -q ${VLLM_LOCAL_REF} && \
+    git remote remove local
+
+USER 2000
+
+ENTRYPOINT ["python", "-m", "vllm.entrypoints.openai.api_server"]
